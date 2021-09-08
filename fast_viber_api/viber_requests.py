@@ -1,4 +1,4 @@
-from typing import Optional, List, Any, Union
+from typing import Optional, List, Any, Union, Callable
 from typing_extensions import Literal
 
 from pydantic import BaseModel
@@ -35,15 +35,16 @@ class User(BaseModel):
 
 class BaseRequest(BaseModel):
     event: str
+    answer: Callable = None
 
 
-class WebhookRequest(BaseModel):
+class WebhookRequest(BaseRequest):
     event: Literal['webhook']
     timestamp: int
     message_token: int
 
 
-class SubscribedRequest(BaseModel):
+class SubscribedRequest(BaseRequest):
     event: Literal['subscribed']
     timestamp: Optional[int]
     user: Optional[User]
@@ -51,7 +52,7 @@ class SubscribedRequest(BaseModel):
     chat_hostname: Optional[str]
 
 
-class UnsubscribedRequest(BaseModel):
+class UnsubscribedRequest(BaseRequest):
     event: Literal['unsubscribed']
     timestamp: Optional[int]
     user_id: Optional[str]
@@ -59,7 +60,7 @@ class UnsubscribedRequest(BaseModel):
     chat_hostname: Optional[str]
 
 
-class ConversationStartedRequest(BaseModel):
+class ConversationStartedRequest(BaseRequest):
     event: Literal['conversation_started']
     timestamp: Optional[int]
     message_token: Optional[int]
@@ -70,7 +71,7 @@ class ConversationStartedRequest(BaseModel):
     chat_hostname: Optional[str]
 
 
-class DeliveredRequest(BaseModel):
+class DeliveredRequest(BaseRequest):
     event: Literal['delivered']
     timestamp: Optional[int]
     message_token: Optional[int]
@@ -78,7 +79,7 @@ class DeliveredRequest(BaseModel):
     chat_hostname: Optional[str]
 
 
-class SeenRequest(BaseModel):
+class SeenRequest(BaseRequest):
     event: Literal['seen']
     timestamp: Optional[int]
     message_token: Optional[int]
@@ -263,7 +264,7 @@ class RichMediaMessage(BaseMessage):
     rich_media: Optional[RichMedia]
 
 
-class ReceiveMessageRequest(BaseModel):
+class ReceiveMessageRequest(BaseRequest):
     event: Literal['message']
     timestamp: Optional[int]
     message_token: Optional[int]

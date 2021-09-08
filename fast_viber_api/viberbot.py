@@ -1,17 +1,22 @@
 import asyncio
 import hashlib
 import hmac
+import logging
 import ssl
 from typing import Optional, Union
 
 import aiohttp
 import certifi
+from starlette.requests import Request
 
 from fast_viber_api.handler import Handler
-from fast_viber_api.viber_requests import BotConfiguration, BaseMessage, BaseRequest
+from fast_viber_api.redis_machine import RedisMachine
+from fast_viber_api.user import User
+from fast_viber_api.viber_requests import BotConfiguration, BaseMessage, BaseRequest, viber_request
 
 VIBER_BOT_API_URL = "https://chatapi.viber.com/pa"
-VIBER_BOT_USER_AGENT = "ViberBot-Python/0.0.1"
+
+logging.root.setLevel(logging.NOTSET)
 
 
 class Endpoints:
@@ -36,12 +41,12 @@ class Events:
 
 class ViberBot:
     api_url = VIBER_BOT_API_URL
-    user_agent = VIBER_BOT_USER_AGENT
 
     def __init__(self, auth_token, name, connections_limit=None, loop=None):
         if loop is None:
             loop = asyncio.get_event_loop()
         self.loop = loop
+        self.redis_machine = RedisMachine()
         self.bot_configuration = BotConfiguration(
             auth_token=auth_token,
             name=name
@@ -72,15 +77,12 @@ class ViberBot:
         return await self.send(Endpoints.SEND_MESSAGE, payload)
 
     async def send(self, uri, payload):
-        headers = {
-            'User-Agent': self.user_agent
-        }
         url = f"{self.api_url}/{uri}"
 
         payload = {**self.bot_configuration.dict(),
                    **payload}
 
-        async with self.session.post(url, json=payload, headers=headers) as response:
+        async with self.session.post(url, json=payload) as response:
             return await response.json()
 
     def verify_signature(self, request_data, signature):
@@ -91,12 +93,39 @@ class ViberBot:
             bytes(self.bot_configuration.auth_token.encode('ascii')),
             msg=message, digestmod=hashlib.sha256).hexdigest()
 
-    def handle(self, events='message', **kwargs):
-        def decorator(coro):
-            self.handlers.append(Handler(coro, events, kwargs))
+    def handle(self, event='message', state='', **kwargs):
+        def decorator(func):
+            self.handlers.append(Handler(self, func, event, kwargs, state=state))
+            return func
 
         return decorator
 
-    async def call_handlers(self, request: Optional[BaseRequest]):
+    def get_user(self, request):
+        dict_request = request.dict()
+        if request.event in ['subscribed', 'conversation_started']:
+            user_id = dict_request['user']['id']
+        elif request.event in ['unsubscribed', 'delivered', 'seen', 'failed']:
+            user_id = dict_request['user_id']
+        elif request.event == 'message':
+            user_id = dict_request['sender']['id']
+        else:
+            user_id = ''
+
+        return User(user_id, self)
+
+    async def call_handlers(self, request: Optional[BaseRequest], state):
         for handler in self.handlers:
-            await handler.call(request)
+            await handler.call(request, state)
+
+    async def api(self, viber: viber_request, request: Request):
+        text = await request.body()
+        sig = request.query_params.get('sig')
+
+        logging.info("ViberRequest: %s", viber)
+
+        if not self.verify_signature(text, sig):
+            logging.warning("Invalid signature")
+            return
+
+        user = self.get_user(viber)
+        await self.call_handlers(viber, await user.state)

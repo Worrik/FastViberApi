@@ -12,8 +12,8 @@ rm -rf FastViberApi
 ```py
 from fastapi import FastAPI
 
-from fast_viber_api import ViberBot, viber_api, Events, ConversationStartedRequest, Message, ReceiveMessageRequest
-
+from fast_viber_api import ViberBot, Events, ConversationStartedRequest, Message, ReceiveMessageRequest
+from fast_viber_api.user import User
 
 app = FastAPI()
 
@@ -22,20 +22,23 @@ bot = ViberBot(
     name='TestBot'
 )
 
-app.add_api_route("/viber/", viber_api(bot), methods=['POST'])
+app.add_api_route("/", bot.api, methods=['POST'])
 
 
-@bot.handle(events=Events.CONVERSATION_STARTED)
-async def hello(request: ConversationStartedRequest):
-    await bot.send_message(Message(text='Hello'), receiver=request.user.id)
+@bot.handle(event=Events.CONVERSATION_STARTED)
+async def hello(request: ConversationStartedRequest, user: User):
+    await user.answer(Message(text='Hello'))
 
 
-@bot.handle()
-async def echo(request: ReceiveMessageRequest):
-    await bot.send_message(
-        request.message,
-        receiver=request.sender.id
-    )
+@bot.handle(message=Message(text='ping'), state='ping')
+async def ping_pong(request: ReceiveMessageRequest, user: User):
+    await user.answer(Message(text='pong'))
+    await user(state='end')
+
+
+@bot.handle(state='end')
+async def echo(request: ReceiveMessageRequest, user: User):
+    await user.answer(request.message)
 
 ```
 ```sh
