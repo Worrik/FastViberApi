@@ -28,6 +28,7 @@ app.add_api_route("/", bot.api, methods=['POST'])
 @bot.handle(event=Events.CONVERSATION_STARTED)
 async def hello(request: ConversationStartedRequest, user: User):
     await user.answer(Message(text='Hello'))
+    await user(state='ping')
 
 
 @bot.handle(message=Message(text='ping'), state='ping')
